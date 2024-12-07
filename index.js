@@ -1,28 +1,32 @@
+// Required Dependencies
 const express = require("express");
 const bodyParser = require("body-parser");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const fs = require("fs");
+const path = require("path");
+const morgan = require("morgan");
 
+// Initialize Express App
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000; // Use Azure-assigned port
+const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret";
 
 // Middleware
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
-app.use(express.static("public")); // Serve static files
+app.use(express.static("public"));
+app.use(morgan("combined")); // Logging requests
 
 // Dummy Data (In-Memory Database)
 let users = [];
 let media = [];
 
-// JWT Secret
-const JWT_SECRET = "1212312123";
-
 // File Upload Configuration
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "public/uploads/"),
+  destination: (req, file, cb) =>
+    cb(null, path.join(process.env.HOME || __dirname, "site", "wwwroot", "uploads")),
   filename: (req, file, cb) => cb(null, Date.now() + "-" + file.originalname),
 });
 const upload = multer({ storage });
@@ -102,7 +106,13 @@ app.delete("/media/:id", (req, res) => {
   if (mediaIndex === -1) return res.status(404).json({ error: "Media not found" });
 
   const mediaItem = media[mediaIndex];
-  const filePath = `public/uploads/${mediaItem.file_url}`;
+  const filePath = path.join(
+    process.env.HOME || __dirname,
+    "site",
+    "wwwroot",
+    "uploads",
+    mediaItem.file_url
+  );
   fs.unlink(filePath, (err) => {
     if (err) {
       console.error("Failed to delete file:", err);
@@ -114,7 +124,16 @@ app.delete("/media/:id", (req, res) => {
 });
 
 // Static File Serving
-app.use("/uploads", express.static("public/uploads"));
+app.use("/uploads", express.static(path.join(process.env.HOME || __dirname, "site", "wwwroot", "uploads")));
+
+// Health Check Endpoint
+app.get("/health", (req, res) => res.status(200).send("OK"));
+
+// Global Error Handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Something went wrong!" });
+});
 
 // Start Server
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
